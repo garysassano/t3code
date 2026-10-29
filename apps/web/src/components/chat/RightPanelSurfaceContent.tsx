@@ -10,6 +10,7 @@ import type {
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
+import SideChatPane from "./SideChatPane";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import { type RightPanelSurface, useRightPanelStore } from "../../rightPanelStore";
@@ -31,7 +32,6 @@ const DevicePanel = lazy(() =>
   import("../device/DevicePanel").then((module) => ({ default: module.DevicePanel })),
 );
 const FilePreviewPanel = lazy(() => import("../files/FilePreviewPanel"));
-const SideChatPane = lazy(() => import("./SideChatPane"));
 
 type RightPanelTerminalProps = Omit<
   PersistentThreadTerminalPanelProps,
@@ -167,15 +167,14 @@ export function RightPanelSurfaceContent(props: {
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
     case "side-chat":
+      // Not lazy: revealing a suspended tiptap editor tears down its view and crashes the composer.
       return (
-        <Suspense fallback={null}>
-          <SideChatPane
-            key={surface.id}
-            parentRef={threadRef}
-            threadId={surface.threadId}
-            onClose={() => props.onCloseSurface(surface)}
-          />
-        </Suspense>
+        <SideChatPane
+          key={surface.id}
+          parentRef={threadRef}
+          threadId={surface.threadId}
+          onClose={() => props.onCloseSurface(surface)}
+        />
       );
     case "device":
       return (
