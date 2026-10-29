@@ -60,6 +60,37 @@ describe("normalizeDesktopUpdateReleaseNotes", () => {
     });
   });
 
+  it("shows a generated summary in order and skips the folded full list", () => {
+    const fixes = Array.from({ length: 9 }, (_, index) => `- Fix ${index + 1} (#${index + 1})`);
+    const result = normalizeDesktopUpdateReleaseNotes(
+      [
+        "**v1.2.4** · Oct 29, 2026 · 12 changes from 3 contributors in 2 days",
+        "## Highlights",
+        "Link machines (beta).",
+        "## Fixes",
+        ...fixes,
+        "<details>",
+        "<summary>Full changelog</summary>",
+        "* fix: raw entry by @human in https://github.com/pingdotgg/t3code/pull/1",
+        "</details>",
+      ].join("\n"),
+      "1.2.4",
+      "latest",
+    );
+
+    expect(result.releaseNotes).toEqual([
+      {
+        version: "1.2.4",
+        items: [
+          "v1.2.4 · Oct 29, 2026 · 12 changes from 3 contributors in 2 days",
+          "Link machines (beta).",
+          ...fixes.slice(0, 6).map((fix) => fix.slice(2)),
+        ],
+        totalItems: 11,
+      },
+    ]);
+  });
+
   it("does not count Markdown or HTML section headings as changes", () => {
     const changes = Array.from({ length: 8 }, (_, index) => `Change ${index + 1}`);
     const result = normalizeDesktopUpdateReleaseNotes(

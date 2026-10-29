@@ -98,9 +98,12 @@ interface ExtractedReleaseNoteItems {
 function extractReleaseNoteItems(note: string | null | undefined): ExtractedReleaseNoteItems {
   if (!note) return { items: [], totalItems: 0 };
 
+  // Generated summaries fold GitHub's full list under <details>; show the summary in order.
+  const summaryEnd = note.search(/<details\b/i);
+  const isSummary = summaryEnd >= 0;
   const items: string[] = [];
   let totalItems = 0;
-  for (const rawLine of stripMarkup(note).split("\n")) {
+  for (const rawLine of stripMarkup(isSummary ? note.slice(0, summaryEnd) : note).split("\n")) {
     const item = rawLine
       .trim()
       .replace(/^[-*]\s+/, "")
@@ -111,10 +114,15 @@ function extractReleaseNoteItems(note: string | null | undefined): ExtractedRele
     if (/^#{1,6}\s+/.test(item)) continue;
     if (isIgnoredReleaseNoteLine(item)) continue;
     totalItems += 1;
+    if (isSummary) {
+      if (items.length < MAX_RELEASE_NOTE_ITEMS_PER_GROUP)
+        items.push(truncateReleaseNoteItem(item));
+      continue;
+    }
     items.push(truncateReleaseNoteItem(item));
     if (items.length > MAX_RELEASE_NOTE_ITEMS_PER_GROUP) items.shift();
   }
-  return { items: items.toReversed(), totalItems };
+  return { items: isSummary ? items : items.toReversed(), totalItems };
 }
 
 interface NormalizedDesktopUpdateReleaseNotes {

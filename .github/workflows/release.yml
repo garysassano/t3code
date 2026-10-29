@@ -740,11 +740,66 @@ jobs:
       resource_key: win32-arm64
       cli_archive: true
 
+  # Writes a short model summary with GitHub's full list folded under it. It
+  # runs beside the builds, and the release falls back to GitHub's generated
+  # notes when no notes file comes out of it.
+  release_notes:
+    name: Write release notes
+    needs: [preflight]
+    if: needs.preflight.outputs.release_channel != 'preview' && needs.preflight.outputs.previous_tag != ''
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      # The generate-notes endpoint requires contents: write; nothing here pushes.
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          # The commit range needs history back to the previous tag, not file contents.
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter=@t3tools/scripts...
+
+      - name: Generate release notes
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          node scripts/generate-release-notes.ts \
+            --repository "${{ github.repository }}" \
+            --tag "${{ needs.preflight.outputs.tag }}" \
+            --ref "${{ needs.preflight.outputs.ref }}" \
+            --previous-tag "${{ needs.preflight.outputs.previous_tag }}" \
+            --version "${{ needs.preflight.outputs.version }}" \
+            --output release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release notes
+        if: hashFiles('release-notes.md') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 7
+
   release:
     name: Publish GitHub Release
     needs:
       [
         preflight,
+        release_notes,
         relay_public_config,
         quality,
         test,
@@ -757,7 +812,7 @@ jobs:
         desktop_win_x64,
         desktop_win_arm64,
       ]
-    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.relay_public_config.result == 'success' && needs.quality.result == 'success' && needs.test.result == 'success' && needs.test_web.result == 'success' && needs.test_server.result == 'success' && needs.desktop_mac_arm64.result == 'success' && needs.desktop_mac_x64.result == 'success' && needs.desktop_linux_x64.result == 'success' && needs.desktop_linux_arm64.result == 'success' && needs.desktop_win_x64.result == 'success' && needs.desktop_win_arm64.result == 'success' }}
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.relay_public_config.result == 'success' && needs.quality.result == 'success' && needs.test.result == 'success' && needs.test_web.result == 'success' && needs.test_server.result == 'success' && needs.desktop_mac_arm64.result == 'success' && needs.desktop_mac_x64.result == 'success' && needs.desktop_linux_x64.result == 'success' && needs.desktop_linux_arm64.result == 'success' && needs.desktop_win_x64.result == 'success' && needs.desktop_win_arm64.result == 'success' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
@@ -892,6 +947,23 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
+      - name: Download release notes
+        if: needs.preflight.outputs.release_channel != 'preview'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+
+      - id: release_notes
+        name: Check release notes
+        shell: bash
+        run: |
+          if [[ "${{ needs.preflight.outputs.release_channel }}" != "preview" && -s release-notes.md ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # A preview release gets a warning instead of generated notes. Generated
       # notes would list every commit since the previous preview, which is
       # unmerged branch history no one should read as a changelog, and would
@@ -917,8 +989,8 @@ jobs:
           tag_name: ${{ needs.preflight.outputs.tag }}
           target_commitish: ${{ needs.preflight.outputs.ref }}
           name: ${{ needs.preflight.outputs.release_name }}
-          generate_release_notes: ${{ needs.preflight.outputs.release_channel != 'preview' }}
-          body_path: ${{ needs.preflight.outputs.release_channel == 'preview' && 'release-notes.md' || '' }}
+          generate_release_notes: ${{ needs.preflight.outputs.release_channel != 'preview' && steps.release_notes.outputs.ready != 'true' }}
+          body_path: ${{ (needs.preflight.outputs.release_channel == 'preview' || steps.release_notes.outputs.ready == 'true') && 'release-notes.md' || '' }}
           previous_tag: ${{ needs.preflight.outputs.previous_tag }}
           prerelease: ${{ needs.preflight.outputs.is_prerelease }}
           make_latest: ${{ needs.preflight.outputs.make_latest }}

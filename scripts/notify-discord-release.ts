@@ -193,9 +193,15 @@ export const buildDiscordReleaseAnnouncement = (
     options.target === "prerelease"
       ? "A new T3 Code prerelease is available for nightly testers."
       : `[View full release notes on GitHub](${options.releaseUrl.href})`;
+  // Generated summaries fold the full list under <details>, which Discord cannot render.
+  const [summary = "", folded] = (options.releaseNotes ?? "").split(/^<details>/m);
   const notes =
     options.target === "prerelease"
-      ? suppressMentions(formatReleaseNotes(options.releaseNotes?.trim() ?? ""))
+      ? suppressMentions(
+          folded === undefined
+            ? formatReleaseNotes(summary.trim())
+            : `${summary.trim()}\n\n[Full changelog](${options.releaseUrl.href})`,
+        )
       : "";
   const description = notes ? `${intro}\n\n${notes}` : intro;
   // Separate embeds avoid URL deduplication; reserve title and footer space within Discord's 6000-character limit.
