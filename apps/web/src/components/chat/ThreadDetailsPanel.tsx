@@ -135,7 +135,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           target.closest("input, textarea, [contenteditable], a[href]") ||
           (selection &&
             !selection.isCollapsed &&
-            event.currentTarget.contains(selection.anchorNode))
+            (event.currentTarget.contains(selection.anchorNode) ||
+              event.currentTarget.contains(selection.focusNode)))
         )
           return;
         event.preventDefault();
