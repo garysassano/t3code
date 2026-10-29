@@ -65,7 +65,12 @@ export function useOpenFavoriteEditorShortcut({
   useEffect(() => {
     if (!enabled || remote.mode === "remote-unavailable") return;
     const handler = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented || !isOpenFavoriteEditorShortcut(event, keybindings)) return;
+      if (
+        event.repeat ||
+        event.defaultPrevented ||
+        !isOpenFavoriteEditorShortcut(event, keybindings)
+      )
+        return;
       if (!openInCwd || !preferredEditor) return;
 
       event.preventDefault();
