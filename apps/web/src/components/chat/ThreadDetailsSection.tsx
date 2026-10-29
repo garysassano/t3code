@@ -22,7 +22,8 @@ export function ThreadDetailsSection({
       {...props}
       aria-labelledby={showHeading ? headingId : undefined}
       aria-label={showHeading ? undefined : title}
-      className={cn("px-2 pt-2 pb-2.5", separated && "border-t border-border/65")}
+      // The first rendered section never needs a divider, even when the user hid the ones above it.
+      className={cn("px-2 pt-2 pb-2.5", separated && "border-t border-border/65 first:border-t-0")}
     >
       <div
         className={cn(
