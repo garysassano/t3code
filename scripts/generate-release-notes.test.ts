@@ -22,14 +22,17 @@ it("counts each person once and leaves out bots", () => {
     { subject: "fix: direct push by a PR author", authorName: "Ada Lovelace" },
     { subject: "fix: direct push by someone else", authorName: "Grace Hopper" },
     { subject: "chore: direct push by a bot", authorName: "t3-code[bot]" },
+    { subject: "fix(web): four (#4)", authorName: "Linus T" },
+    { subject: "fix: direct push by a PR author with no profile name", authorName: "Linus T" },
   ];
   const pullRequests = new Map([
     [1, pullRequest({ __typename: "User", login: "ada", name: "Ada Lovelace" })],
     [2, pullRequest({ __typename: "User", login: "ada", name: "Ada Lovelace" })],
     [3, pullRequest({ __typename: "Bot", login: "dependabot" })],
+    [4, pullRequest({ __typename: "User", login: "linus", name: null })],
   ]);
 
-  assert.equal(countContributors(commits, pullRequests), 2);
+  assert.equal(countContributors(commits, pullRequests), 3);
 });
 
 it("leaves mobile-only scopes out and keeps shared ones", () => {

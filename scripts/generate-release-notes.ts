@@ -152,6 +152,10 @@ export function countContributors(
     people.add(author.login);
     if (author.name) names.add(author.name);
   }
+  // A PR's squash commit carries its author's git name, which may differ from the profile name.
+  for (const commit of commits) {
+    if (pullRequestNumber(commit.subject) !== undefined) names.add(commit.authorName);
+  }
   for (const commit of commits) {
     if (
       pullRequestNumber(commit.subject) === undefined &&
