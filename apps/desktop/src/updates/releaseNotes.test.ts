@@ -84,7 +84,7 @@ describe("normalizeDesktopUpdateReleaseNotes", () => {
         items: [
           "v1.2.4 · Oct 29, 2026 · 12 changes from 3 contributors in 2 days",
           "Link machines (beta).",
-          ...fixes.slice(0, 6).map((fix) => fix.slice(2)),
+          ...fixes.map((fix) => fix.slice(2)),
         ],
         totalItems: 11,
       },

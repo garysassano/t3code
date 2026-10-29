@@ -114,9 +114,9 @@ function extractReleaseNoteItems(note: string | null | undefined): ExtractedRele
     if (/^#{1,6}\s+/.test(item)) continue;
     if (isIgnoredReleaseNoteLine(item)) continue;
     totalItems += 1;
+    // A summary is already short; cutting it would drop the highlights mid-sentence.
     if (isSummary) {
-      if (items.length < MAX_RELEASE_NOTE_ITEMS_PER_GROUP)
-        items.push(truncateReleaseNoteItem(item));
+      items.push(item);
       continue;
     }
     items.push(truncateReleaseNoteItem(item));

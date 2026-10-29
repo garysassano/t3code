@@ -21,6 +21,7 @@ it("counts each person once and leaves out bots", () => {
     { subject: "chore: bump (#3)", authorName: "dependabot[bot]" },
     { subject: "fix: direct push by a PR author", authorName: "Ada Lovelace" },
     { subject: "fix: direct push by someone else", authorName: "Grace Hopper" },
+    { subject: "chore: direct push by a bot", authorName: "t3-code[bot]" },
   ];
   const pullRequests = new Map([
     [1, pullRequest({ __typename: "User", login: "ada", name: "Ada Lovelace" })],
@@ -37,6 +38,7 @@ it("leaves mobile-only scopes out and keeps shared ones", () => {
     "feat(android): b": false,
     "fix(ios)!: c": false,
     "fix(web,mobile): d": true,
+    "feat(mobile,web): f": true,
     "fix(server): e": true,
   };
   for (const [subject, kept] of Object.entries(subjects)) {

@@ -135,6 +135,12 @@ const suppressMentions = (text: string) =>
 
 const escapeLinkLabel = (text: string) => text.replace(/[\\[\]]/g, "\\$&");
 
+/** GitHub links `(#123)` on the release page; Discord needs the link written out. */
+function linkPullRequestNumbers(notes: string, releaseUrl: URL) {
+  const repositoryUrl = releaseUrl.href.split("/releases/")[0];
+  return notes.replace(/#(\d+)\b/g, `[#$1](${repositoryUrl}/pull/$1)`);
+}
+
 function formatReleaseNotes(notes: string) {
   return notes
     .replace(
@@ -200,7 +206,7 @@ export const buildDiscordReleaseAnnouncement = (
       ? suppressMentions(
           folded === undefined
             ? formatReleaseNotes(summary.trim())
-            : `${summary.trim()}\n\n[Full changelog](${options.releaseUrl.href})`,
+            : `${linkPullRequestNumbers(summary.trim(), options.releaseUrl)}\n\n[Full changelog](${options.releaseUrl.href})`,
         )
       : "";
   const description = notes ? `${intro}\n\n${notes}` : intro;

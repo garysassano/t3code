@@ -15,7 +15,8 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 // Release notes cover web, desktop, and server. Mobile ships its own store notes.
-const MOBILE_ONLY_SCOPE = /^[a-z]+\((?:mobile|android|ios)[^)]*\)!?:/i;
+const MOBILE_SCOPES = new Set(["mobile", "android", "ios"]);
+const COMMIT_SCOPES = /^[a-z]+\(([^)]*)\)!?:/i;
 const PULL_REQUEST_NUMBER = /\(#(\d+)\)$/;
 const PULL_REQUEST_BODY_LIMIT = 300;
 const SUMMARY_MODEL = "gpt-6.1-terra";
@@ -58,7 +59,7 @@ export class EmptyReleaseRangeError extends Schema.TaggedError<EmptyReleaseRange
   { range: Schema.String },
 ) {}
 
-export interface ReleaseCommit {
+interface ReleaseCommit {
   readonly subject: string;
   readonly authorName: string;
 }
@@ -100,16 +101,19 @@ const SummaryResponse = Schema.Struct({
   ),
 });
 
-export const pullRequestNumber = (subject: string) => {
+const pullRequestNumber = (subject: string) => {
   const match = PULL_REQUEST_NUMBER.exec(subject);
   return match ? Number(match[1]) : undefined;
 };
 
-export const isReleaseNoteCommit = (commit: ReleaseCommit) =>
-  !MOBILE_ONLY_SCOPE.test(commit.subject);
+/** Drops a commit only when every scope is mobile, so `fix(web,mobile)` stays. */
+export function isReleaseNoteCommit(commit: ReleaseCommit): boolean {
+  const scopes = COMMIT_SCOPES.exec(commit.subject)?.[1]?.split(",");
+  return !scopes?.every((scope) => MOBILE_SCOPES.has(scope.trim().toLowerCase()));
+}
 
 /** Keeps the prose of a PR body: no images, tables, headings, HTML, or verification sections. */
-export function trimPullRequestBody(body: string, limit = PULL_REQUEST_BODY_LIMIT): string {
+function trimPullRequestBody(body: string, limit = PULL_REQUEST_BODY_LIMIT): string {
   const [prose = ""] = body.split(/\n#+\s*(?:Verification|Council|Test|Testing|Screenshots)\b/i);
   const text = prose
     .split("\n")
@@ -120,7 +124,7 @@ export function trimPullRequestBody(body: string, limit = PULL_REQUEST_BODY_LIMI
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
 }
 
-export function buildSummaryInput(
+function buildSummaryInput(
   commits: ReadonlyArray<ReleaseCommit>,
   pullRequests: ReadonlyMap<number, PullRequest>,
 ): string {
@@ -149,14 +153,18 @@ export function countContributors(
     if (author.name) names.add(author.name);
   }
   for (const commit of commits) {
-    if (pullRequestNumber(commit.subject) === undefined && !names.has(commit.authorName)) {
+    if (
+      pullRequestNumber(commit.subject) === undefined &&
+      !commit.authorName.endsWith("[bot]") &&
+      !names.has(commit.authorName)
+    ) {
       people.add(commit.authorName);
     }
   }
   return people.size;
 }
 
-export function formatElapsed(milliseconds: number): string {
+function formatElapsed(milliseconds: number): string {
   const units = [
     ["day", 86_400_000],
     ["hour", 3_600_000],
@@ -169,7 +177,7 @@ export function formatElapsed(milliseconds: number): string {
   return "under a minute";
 }
 
-export function buildReleaseHeader(options: {
+function buildReleaseHeader(options: {
   readonly version: string;
   /** Epoch milliseconds. */
   readonly builtAt: number;
@@ -189,13 +197,8 @@ export function buildReleaseHeader(options: {
 }
 
 /** The summary leads; GitHub's full list folds under it. Clients cut the body at `<details>`. */
-export function assembleReleaseNotes(
-  header: string,
-  summary: Option.Option<string>,
-  fullChangelog: string,
-): string {
-  if (Option.isNone(summary)) return `${header}\n\n${fullChangelog.trim()}\n`;
-  return `${header}\n\n${summary.value.trim()}\n\n<details>\n<summary>Full changelog</summary>\n\n${fullChangelog.trim()}\n\n</details>\n`;
+function assembleReleaseNotes(header: string, summary: string, fullChangelog: string): string {
+  return `${header}\n\n${summary.trim()}\n\n<details>\n<summary>Full changelog</summary>\n\n${fullChangelog.trim()}\n\n</details>\n`;
 }
 
 const run = Effect.fn("generateReleaseNotes.run")(function* (
@@ -225,13 +228,24 @@ const readCommits = Effect.fn("generateReleaseNotes.readCommits")(function* (
     .map((line): ReleaseCommit => {
       const [subject = "", authorName = ""] = line.split("\x1f");
       return { subject, authorName };
-    })
-    .filter(isReleaseNoteCommit);
+    });
 });
 
-const readCommitDate = Effect.fn("generateReleaseNotes.readCommitDate")(function* (ref: string) {
-  return Date.parse((yield* run("git", ["log", "-1", "--format=%cI", ref])).trim());
-});
+/** When the previous release was published, else its commit time. Stable promotes an older nightly commit. */
+const readPreviousReleaseTime = Effect.fn("generateReleaseNotes.readPreviousReleaseTime")(
+  function* (repository: string, previousTag: string) {
+    const published = Date.parse(
+      yield* run("gh", [
+        "api",
+        `repos/${repository}/releases/tags/${previousTag}`,
+        "--jq",
+        ".published_at",
+      ]).pipe(Effect.map((output) => output.trim())),
+    );
+    if (!Number.isNaN(published)) return published;
+    return Date.parse((yield* run("git", ["log", "-1", "--format=%cI", previousTag])).trim());
+  },
+);
 
 const readPullRequests = Effect.fn("generateReleaseNotes.readPullRequests")(function* (
   repository: string,
@@ -330,46 +344,44 @@ const command = Command.make(
   },
   ({ repository, tag, ref, previousTag, version, output }) =>
     Effect.gen(function* () {
-      const commits = yield* readCommits(previousTag, ref);
-      // An empty log usually means the previous tag is missing from a shallow clone.
-      if (commits.length === 0) {
+      // The header counts everything in the folded list; the summary skips mobile-only work.
+      const allCommits = yield* readCommits(previousTag, ref);
+      // The spawner ignores exit codes, so a failed git log shows up as an empty range.
+      if (allCommits.length === 0) {
         return yield* new EmptyReleaseRangeError({ range: `${previousTag}..${ref}` });
       }
+      const commits = allCommits.filter(isReleaseNoteCommit);
       const numbers = [
-        ...new Set(commits.flatMap(({ subject }) => pullRequestNumber(subject) ?? [])),
+        ...new Set(allCommits.flatMap(({ subject }) => pullRequestNumber(subject) ?? [])),
       ];
-      const [pullRequests, fullChangelog, builtAt, previousBuiltAt] = yield* Effect.all(
+      const [pullRequests, fullChangelog, previousBuiltAt] = yield* Effect.all(
         [
           readPullRequests(repository, numbers),
           readFullChangelog({ repository, tag, ref, previousTag }),
-          readCommitDate(ref),
-          readCommitDate(previousTag),
+          readPreviousReleaseTime(repository, previousTag),
         ],
         { concurrency: "unbounded" },
       );
+      const builtAt = DateTime.toEpochMillis(yield* DateTime.now);
       const header = buildReleaseHeader({
         version,
         builtAt,
         previousBuiltAt,
-        changes: commits.length,
-        contributors: countContributors(commits, pullRequests),
+        changes: allCommits.length,
+        contributors: countContributors(allCommits, pullRequests),
       });
-      // A failed summary still publishes the header and GitHub's full list.
-      const summary = yield* summarize(buildSummaryInput(commits, pullRequests)).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("release summary failed, publishing the full list only", cause).pipe(
-            Effect.as(Option.none<string>()),
-          ),
-        ),
-      );
+      // With no summary, write nothing: the release falls back to GitHub's generated notes.
+      const summary =
+        commits.length === 0
+          ? Option.none<string>()
+          : yield* summarize(buildSummaryInput(commits, pullRequests));
+      if (Option.isNone(summary)) {
+        return yield* Effect.logWarning("no release summary, leaving GitHub's notes in place");
+      }
       const fs = yield* FileSystem.FileSystem;
-      yield* fs.writeFileString(output, assembleReleaseNotes(header, summary, fullChangelog));
+      yield* fs.writeFileString(output, assembleReleaseNotes(header, summary.value, fullChangelog));
       yield* Effect.logInfo("release notes written").pipe(
-        Effect.annotateLogs({
-          output,
-          commits: commits.length,
-          summarized: Option.isSome(summary),
-        }),
+        Effect.annotateLogs({ output, commits: commits.length }),
       );
     }),
 ).pipe(
