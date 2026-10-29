@@ -54,7 +54,7 @@ Examples of the tone:
 - Bad: "Settings and Usage open as large modals over your thread." Good: leave it out.
 - Bad: "Cmd/Ctrl+W closes tabs safely (#25860)" Good: "Cmd/Ctrl+W no longer closes the whole window (#25860)"`;
 
-export class EmptyReleaseRangeError extends Schema.TaggedError<EmptyReleaseRangeError>()(
+class EmptyReleaseRangeError extends Schema.TaggedError<EmptyReleaseRangeError>()(
   "EmptyReleaseRangeError",
   { range: Schema.String },
 ) {}
@@ -344,7 +344,7 @@ const command = Command.make(
   },
   ({ repository, tag, ref, previousTag, version, output }) =>
     Effect.gen(function* () {
-      // The header counts everything in the folded list; the summary skips mobile-only work.
+      // The header counts every commit in the range; the summary skips mobile-only work.
       const allCommits = yield* readCommits(previousTag, ref);
       // The spawner ignores exit codes, so a failed git log shows up as an empty range.
       if (allCommits.length === 0) {
