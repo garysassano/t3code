@@ -36,7 +36,7 @@ export function ThreadDetailsItemsRow() {
                 variant="outline"
                 size="sm"
                 className="w-full justify-between sm:w-40"
-                aria-label="Thread details"
+                aria-label={`Thread details: ${enabled} of ${THREAD_DETAILS_ITEMS.length} on`}
               />
             }
           >

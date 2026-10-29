@@ -125,12 +125,17 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         .map((item) => item.id)
         .join(",")}
       onContextMenu={(event) => {
-        // Popups the card opens bubble here through React; they, fields, and links keep their own menus.
+        // Popups the card opens bubble here through React; they, fields, links, and selected text
+        // keep their own menus.
         const target = event.target;
+        const selection = window.getSelection();
         if (
           !(target instanceof Element) ||
           !event.currentTarget.contains(target) ||
-          target.closest("input, textarea, [contenteditable], a[href]")
+          target.closest("input, textarea, [contenteditable], a[href]") ||
+          (selection &&
+            !selection.isCollapsed &&
+            event.currentTarget.contains(selection.anchorNode))
         )
           return;
         event.preventDefault();
