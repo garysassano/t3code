@@ -151,7 +151,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         };
         return (
           <>
-            <div>
+            <div className="group/details-items">
               {show.environment || show.openIn || show.scripts ? (
                 <ThreadDetailsSection
                   headingId="thread-details-workspace-heading"
@@ -248,8 +248,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
               {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
 
-              {/* Shown only when nothing above rendered, so a card emptied by the user can be refilled. */}
-              <div className="hidden p-2 only:block">
+              {/* Shown only when no section above has content, so an emptied card can be refilled. */}
+              <div className="p-2 group-has-[>section>:last-child:not(:empty)]/details-items:hidden">
                 <ThreadDetailsControl
                   size="xs"
                   variant="ghost"
