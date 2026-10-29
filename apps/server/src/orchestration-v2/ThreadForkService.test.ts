@@ -110,6 +110,7 @@ function makeSourceProjection(sourceRun: OrchestrationV2Run): OrchestrationV2Thr
 const planFork = (
   sourceRun: OrchestrationV2Run,
   sourceProjection = makeSourceProjection(sourceRun),
+  options: { readonly sideChat?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const service = yield* ThreadForkService.ThreadForkServiceV2;
@@ -124,6 +125,7 @@ const planFork = (
       transferId: ContextTransferId.make("context-transfer:fork-snoozed-source"),
       targetThreadId,
       title: "Awake fork",
+      ...options,
       createdBy: "user",
       creationSource: "mobile",
       createdAt: forkCreatedAt,
@@ -240,5 +242,25 @@ it.effect("rejects in-progress and rolled-back fork sources", () =>
       assert.equal(error.targetThreadId, targetThreadId);
       assert.equal(error.cause, ThreadForkService.forkableSourceRunStatusError(sourceRun));
     }
+  }),
+);
+
+it.effect("marks only requested forks as side chats", () =>
+  Effect.gen(function* () {
+    const sourceRun = makeSourceRun("completed");
+    const sideChat = yield* planFork(sourceRun, makeSourceProjection(sourceRun), {
+      sideChat: true,
+    });
+    assert.isTrue(sideChat.targetThread.lineage.sideChat);
+
+    const sideChatSource = makeSourceProjection(sourceRun);
+    const forkOfSideChat = yield* planFork(sourceRun, {
+      ...sideChatSource,
+      thread: {
+        ...sideChatSource.thread,
+        lineage: { ...sideChatSource.thread.lineage, sideChat: true },
+      },
+    });
+    assert.isUndefined(forkOfSideChat.targetThread.lineage.sideChat);
   }),
 );

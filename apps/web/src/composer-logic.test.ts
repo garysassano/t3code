@@ -22,6 +22,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   formatAssistantCitationForComposer,
   isPathSuggestionCurrent,
+  parseSideChatCommand,
   replaceTextRange,
 } from "./composer-logic";
 import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
@@ -546,5 +547,19 @@ describe("extendReplacementRangeForTrailingSpace", () => {
     expect(extendReplacementRangeForTrailingSpace("@firest", 3, "@file ")).toBe(3);
     expect(extendReplacementRangeForTrailingSpace("@fi rest", 3, "@file")).toBe(3);
     expect(extendReplacementRangeForTrailingSpace("@fi", 3, "@file ")).toBe(3);
+  });
+});
+
+describe("parseSideChatCommand", () => {
+  it("reads an optional prompt after /side", () => {
+    expect(parseSideChatCommand("/side")).toEqual({ prompt: "" });
+    expect(parseSideChatCommand("  /SIDE  why does this fail?\nline two ")).toEqual({
+      prompt: "why does this fail?\nline two",
+    });
+  });
+
+  it("ignores other commands and inline mentions", () => {
+    expect(parseSideChatCommand("/sidebar")).toBeNull();
+    expect(parseSideChatCommand("ask /side later")).toBeNull();
   });
 });

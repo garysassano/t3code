@@ -216,6 +216,7 @@ export interface ForkThreadFromRunInput extends CommandMetadata {
   readonly targetThreadId: ThreadId;
   readonly runId: RunId;
   readonly title?: string;
+  readonly sideChat?: boolean;
 }
 
 export interface MergeThreadBackInput extends CommandMetadata {
@@ -971,6 +972,7 @@ export const forkThreadFromRun = Effect.fn("EnvironmentCommands.forkThreadFromRu
     targetThreadId: input.targetThreadId,
     sourcePoint: { type: "run", runId: input.runId },
     ...(input.title === undefined ? {} : { title: input.title }),
+    ...(input.sideChat ? { sideChat: true } : {}),
   });
 });
 

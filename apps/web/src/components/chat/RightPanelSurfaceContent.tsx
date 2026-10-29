@@ -11,6 +11,8 @@ import type {
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
+import { ComposerHandleContext } from "../../composerHandleContext";
+import { BackgroundThreadContext } from "./backgroundThread";
 import type { ShortcutMatchContext } from "../../keybindings";
 import { type RightPanelSurface, useRightPanelStore } from "../../rightPanelStore";
 import {
@@ -22,6 +24,7 @@ import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
+import ChatView from "../ChatView";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -165,6 +168,21 @@ export function RightPanelSurfaceContent(props: {
     }
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
+    case "side-chat":
+      return (
+        <BackgroundThreadContext value>
+          <ComposerHandleContext value={null}>
+            <ChatView
+              key={surface.id}
+              environmentId={props.environmentId}
+              threadId={surface.threadId}
+              routeKind="server"
+              reserveTitleBarControlInset={false}
+              embedded
+            />
+          </ComposerHandleContext>
+        </BackgroundThreadContext>
+      );
     case "device":
       return (
         <Suspense fallback={null}>
