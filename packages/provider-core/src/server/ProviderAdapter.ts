@@ -641,6 +641,8 @@ export class ProviderAdapterV2 extends Context.Service<
     readonly planSelectionTransition: (
       input: ProviderSelectionTransitionInput,
     ) => Effect.Effect<ProviderSelectionTransitionPlan, ProviderAdapterV2Error>;
+    /** Whether forkThread can stop at this turn while later turns still run. Absent means never. */
+    readonly canForkAtTurn?: (turn: OrchestrationV2ProviderTurn) => boolean;
     readonly openSession: (
       input: ProviderAdapterV2OpenSessionInput,
     ) => Effect.Effect<ProviderAdapterV2SessionRuntime, ProviderAdapterV2Error, Scope.Scope>;

@@ -4540,6 +4540,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
     planSelectionTransition: Effect.fn("ClaudeAdapterV2.planSelectionTransition")(function () {
       return Effect.succeed(turnScopedSelectionTransition());
     }),
+    // Without an SDK message cursor, forkSession copies the whole session, including a live turn.
+    canForkAtTurn: (turn) =>
+      turn.nativeTurnRef?.nativeId != null && !isSyntheticClaudeTurnId(turn.nativeTurnRef.nativeId),
     openSession: Effect.fn("ClaudeAdapterV2.openSession")(
       function* (input: ProviderAdapter.ProviderAdapterV2OpenSessionInput) {
         const sessionScope = yield* Effect.scope;

@@ -43,7 +43,7 @@ import {
   historicalMessage,
   latestNativeContextUsage,
 } from "@t3tools/provider-core/server/handoffBudget";
-import { deliverContextHandoffs } from "./ContextHandoffDelivery.ts";
+import { deliverContextHandoffs, withInlineContext } from "./ContextHandoffDelivery.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProjectionStore from "./ProjectionStore.ts";
@@ -328,6 +328,7 @@ export const layer: Layer.Layer<
       );
       const handoffs = projection.contextHandoffs.filter(
         (handoff) =>
+          !ContextHandoffService.isSideChatContextHandoff(handoff) &&
           (handoff.transferId == null || !subagentResultTransfers.has(handoff.transferId)) &&
           handoff.status === "ready" &&
           (handoff.targetRunId === run.id ||
@@ -348,6 +349,12 @@ export const layer: Layer.Layer<
                       ))),
               ))),
       );
+      const sideChatContext =
+        projection.contextHandoffs.find(
+          (handoff) =>
+            handoff.targetRunId === run.id &&
+            ContextHandoffService.isSideChatContextHandoff(handoff),
+        )?.summaryText ?? "";
       const nativeForkTransfer = projection.contextTransfers.find(
         (transfer) =>
           transfer.type === "fork" &&
@@ -638,10 +645,19 @@ export const layer: Layer.Layer<
       });
       const { isCurrentAttemptInStatus } = runControls;
 
-      const resolvedRuntimePolicy = yield* runtimePolicy.resolve({
+      const threadRuntimePolicy = yield* runtimePolicy.resolve({
         thread: projection.thread,
         modelSelection: run.modelSelection,
       });
+      // A side chat shares its parent's worktree; its first turn always asks before acting.
+      const resolvedRuntimePolicy =
+        projection.thread.lineage.sideChat === true &&
+        !projection.runs.some((previous) => previous.ordinal < run.ordinal)
+          ? ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+              ...threadRuntimePolicy,
+              runtimeMode: "approval-required",
+            })
+          : threadRuntimePolicy;
       if (!(yield* isCurrentAttemptInStatus("starting"))) return;
       const existingSessionProjection = projection.providerSessions.find(
         (candidate) => candidate.id === providerSessionId,
@@ -1411,7 +1427,7 @@ export const layer: Layer.Layer<
           });
           if (!(yield* isCurrentAttemptInStatus("running"))) return;
           const start = compact ? session.compactThread! : session.startTurn;
-          const context = [delivery.context, restartNote]
+          const context = [delivery.context, sideChatContext, restartNote]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;
@@ -1419,10 +1435,7 @@ export const layer: Layer.Layer<
             ...(noteContinuation ? promptedInput : turnInput),
             message: {
               ...turnInput.message,
-              text:
-                context === "" || goalCommand
-                  ? userText
-                  : `${context}\n\nUser message:\n${userText}`,
+              text: goalCommand ? userText : withInlineContext(context, userText),
             },
           }).pipe(
             // Clear pending handoff markers for refused prompts so the next turn retains the native session.
@@ -1463,6 +1476,7 @@ export const layer: Layer.Layer<
       const deliverySession =
         effectiveHandoffs.length === 0 &&
         retryHandoff.length === 0 &&
+        sideChatContext === "" &&
         restartNote === "" &&
         !noteContinuation
           ? session

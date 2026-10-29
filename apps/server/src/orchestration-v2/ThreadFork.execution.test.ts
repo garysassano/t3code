@@ -607,3 +607,242 @@ it.effect.each([
     );
   },
 );
+
+const writeParentRun = (input: {
+  readonly threadId: ThreadId;
+  readonly runId: RunId;
+  readonly ordinal: number;
+  readonly status: "running" | "completed";
+  readonly text: string;
+}) =>
+  Effect.gen(function* () {
+    const eventSink = yield* EventSink.EventSinkV2;
+    const now = yield* DateTime.now;
+    const { instanceId, modelSelection } = forkCases[0]!;
+    const messageId = MessageId.make(`${input.runId}:message`);
+    yield* eventSink.write({
+      events: [
+        {
+          id: EventId.make(`${input.runId}:created`),
+          type: "run.created",
+          threadId: input.threadId,
+          runId: input.runId,
+          occurredAt: now,
+          payload: {
+            id: input.runId,
+            threadId: input.threadId,
+            ordinal: input.ordinal,
+            providerInstanceId: instanceId,
+            modelSelection,
+            providerThreadId: null,
+            userMessageId: messageId,
+            rootNodeId: null,
+            activeAttemptId: null,
+            status: input.status,
+            queuePosition: null,
+            requestedAt: now,
+            startedAt: now,
+            completedAt: input.status === "completed" ? now : null,
+            checkpointId: null,
+            contextHandoffId: null,
+          },
+        },
+        {
+          id: EventId.make(`${input.runId}:item`),
+          type: "turn-item.updated",
+          threadId: input.threadId,
+          runId: input.runId,
+          occurredAt: now,
+          payload: {
+            id: TurnItemId.make(`${input.runId}:item`),
+            threadId: input.threadId,
+            runId: input.runId,
+            nodeId: null,
+            providerThreadId: null,
+            providerTurnId: null,
+            nativeItemRef: null,
+            parentItemId: null,
+            ordinal: input.ordinal * 100,
+            status: "completed",
+            title: null,
+            startedAt: now,
+            completedAt: now,
+            updatedAt: now,
+            type: "user_message",
+            createdBy: "user",
+            creationSource: "web",
+            inputIntent: "turn_start",
+            messageId,
+            text: input.text,
+            attachments: [],
+          },
+        },
+      ],
+    });
+  });
+
+const createParent = (threadId: ThreadId) =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make(`${threadId}:create`),
+      threadId,
+      projectId: ProjectId.make("side-chat-project"),
+      title: "Side chat parent",
+      modelSelection: forkCases[0]!.modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+  });
+
+it.effect("a side chat opened during the parent's first turn starts from a digest", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const parentId = ThreadId.make("side-chat-busy-parent");
+    const sideChatId = ThreadId.make("side-chat-busy-child");
+    yield* createParent(parentId);
+    yield* writeParentRun({
+      threadId: parentId,
+      runId: RunId.make("side-chat-busy-parent-run"),
+      ordinal: 1,
+      status: "running",
+      text: "PARENT_RUNNING_MARKER",
+    });
+    const fork = (commandId: string, sourceThreadId: ThreadId, targetThreadId: ThreadId) =>
+      orchestrator.dispatch({
+        type: "thread.fork",
+        commandId: CommandId.make(commandId),
+        sourceThreadId,
+        targetThreadId,
+        sourcePoint: { type: "latest_stable" },
+        sideChat: true,
+        createdBy: "user",
+        creationSource: "web",
+      });
+
+    yield* fork("side-chat-busy-fork", parentId, sideChatId);
+    const created = yield* orchestrator.getThreadProjection(sideChatId);
+    assert.isTrue(created.thread.lineage.sideChat);
+    assert.equal(created.thread.runtimeMode, "approval-required");
+    assert.isNull(created.thread.forkedFrom);
+    assert.deepEqual(created.contextTransfers[0]?.sourcePoint, { threadId: parentId });
+
+    const nested = yield* fork(
+      "side-chat-busy-nested",
+      sideChatId,
+      ThreadId.make("side-chat-busy-nested"),
+    ).pipe(Effect.flip);
+    assert.equal(nested._tag, "OrchestratorDispatchError");
+    const busyMergeBack = yield* orchestrator
+      .dispatch({
+        type: "thread.merge_back",
+        commandId: CommandId.make("side-chat-busy-merge-back"),
+        sourceThreadId: sideChatId,
+        targetThreadId: parentId,
+        sourcePoint: { type: "latest_stable" },
+        createdBy: "user",
+        creationSource: "web",
+      })
+      .pipe(Effect.flip);
+    assert.include(String(busyMergeBack.cause), "still running");
+
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("side-chat-busy-first-message"),
+      threadId: sideChatId,
+      messageId: MessageId.make("side-chat-busy-first-message"),
+      text: "What is the main thread doing?",
+      attachments: [],
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const started = yield* orchestrator.getThreadProjection(sideChatId);
+    const [handoff] = started.contextHandoffs;
+    assert.lengthOf(started.contextHandoffs, 1);
+    assert.deepEqual(started.contextTransfers[0]?.resolution, {
+      strategy: "portable_context",
+      contextHandoffId: handoff!.id,
+    });
+    assert.include(handoff!.summaryText, "You are in a side chat beside the main thread.");
+    assert.include(handoff!.summaryText, "- User: PARENT_RUNNING_MARKER");
+    assert.include(handoff!.summaryText, `t3_thread_read on thread ${parentId}`);
+    assert.equal(
+      started.messages.find((message) => message.role === "user")?.text,
+      "What is the main thread doing?",
+    );
+
+    yield* orchestrator.dispatch({
+      type: "thread.delete",
+      commandId: CommandId.make("side-chat-busy-delete-parent"),
+      threadId: parentId,
+    });
+    assert.isNotNull((yield* orchestrator.getThreadProjection(sideChatId)).thread.deletedAt);
+  }).pipe(Effect.provide(forkCases[0]!.layer)),
+);
+
+it.effect("merge-back rejects a second fork's context until the first is consumed", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const parentId = ThreadId.make("merge-back-guard-parent");
+    const parentRunId = RunId.make("merge-back-guard-parent-run");
+    yield* createParent(parentId);
+    yield* writeParentRun({
+      threadId: parentId,
+      runId: parentRunId,
+      ordinal: 1,
+      status: "completed",
+      text: "Parent work",
+    });
+    const forkAndRun = (name: string) =>
+      Effect.gen(function* () {
+        const threadId = ThreadId.make(`merge-back-guard-${name}`);
+        const runId = RunId.make(`merge-back-guard-${name}-run`);
+        yield* orchestrator.dispatch({
+          type: "thread.fork",
+          commandId: CommandId.make(`merge-back-guard-fork-${name}`),
+          sourceThreadId: parentId,
+          targetThreadId: threadId,
+          sourcePoint: { type: "run", runId: parentRunId },
+          sideChat: true,
+          createdBy: "user",
+          creationSource: "web",
+        });
+        yield* writeParentRun({ threadId, runId, ordinal: 1, status: "completed", text: name });
+        return { threadId, runId };
+      });
+    const mergeBack = (commandId: string, fork: { threadId: ThreadId; runId: RunId }) =>
+      orchestrator.dispatch({
+        type: "thread.merge_back",
+        commandId: CommandId.make(commandId),
+        sourceThreadId: fork.threadId,
+        targetThreadId: parentId,
+        sourcePoint: { type: "run", runId: fork.runId },
+        createdBy: "user",
+        creationSource: "web",
+      });
+    const first = yield* forkAndRun("first");
+    const second = yield* forkAndRun("second");
+
+    yield* mergeBack("merge-back-guard-first", first);
+    const rejected = yield* mergeBack("merge-back-guard-second", second).pipe(Effect.flip);
+    assert.include(String(rejected.cause), first.threadId);
+    yield* mergeBack("merge-back-guard-first-again", first);
+
+    const parent = yield* orchestrator.getThreadProjection(parentId);
+    assert.deepEqual(
+      parent.contextTransfers
+        .filter((transfer) => transfer.type === "merge_back")
+        .map((transfer) => [transfer.sourceThreadId, transfer.status]),
+      [
+        [first.threadId, "superseded"],
+        [first.threadId, "pending"],
+      ],
+    );
+  }).pipe(Effect.provide(forkCases[0]!.layer)),
+);

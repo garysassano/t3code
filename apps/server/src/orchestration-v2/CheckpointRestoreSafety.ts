@@ -48,6 +48,17 @@ export const isCheckpointRestoreIsolated = Effect.fn("orchestrationV2.isCheckpoi
         const checkedPaths = new Set<string>();
         for (const otherThread of [...shell.threads, ...shell.archivedThreads]) {
           if (otherThread.id === thread.id || otherThread.deletedAt !== null) continue;
+          // An idle side chat that only answered questions never touched the shared worktree.
+          if (otherThread.lineage.sideChat === true && otherThread.activeRunId === null) {
+            const { turnItems } = yield* projections.getThreadRecords(
+              otherThread.id,
+              ["turnItems"],
+              {
+                turnItemTypes: ["command_execution", "file_change", "dynamic_tool"],
+              },
+            );
+            if (turnItems.length === 0) continue;
+          }
           const other = yield* projections.getCheckpointContext(otherThread.id);
           const providerContext = yield* projections.getThreadProviderContext(otherThread.id);
           const paths = [

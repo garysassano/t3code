@@ -156,3 +156,35 @@ it.layer(layerTest)("ContextHandoffService legacy import", (it) => {
     }),
   );
 });
+
+it("caps the side chat digest to the newest parent items", () => {
+  const parentThreadId = ThreadId.make("thread:side-chat-parent");
+  const digest = Array.from({ length: 60 }, (_, index) =>
+    ContextHandoffService.summarizeDeltaItem(
+      importedItem({
+        role: index % 2 === 0 ? "user" : "assistant",
+        id: `parent-${index}`,
+        text: `item-${index} ${"x".repeat(300)}`,
+        ordinal: index,
+      }),
+    )!,
+  );
+  const context = ContextHandoffService.makeSideChatContext({ parentThreadId, digest });
+  const kept = context
+    .split("\n")
+    .filter((line) => line.startsWith("- ") && line !== "- Earlier items truncated.");
+
+  assert.include(context, "- Earlier items truncated.");
+  assert.notInclude(context, "item-0 ");
+  assert.include(context, "- Assistant: item-59 ");
+  assert.isAtMost(kept.join("\n").length, 8_000);
+  assert.isTrue(
+    context.endsWith(
+      `Use t3_thread_read on thread ${parentThreadId} to see the main thread's live state.`,
+    ),
+  );
+
+  const framingOnly = ContextHandoffService.makeSideChatContext({ parentThreadId, digest: [] });
+  assert.isTrue(framingOnly.startsWith("You are in a side chat beside the main thread."));
+  assert.notInclude(framingOnly, "Main thread activity");
+});

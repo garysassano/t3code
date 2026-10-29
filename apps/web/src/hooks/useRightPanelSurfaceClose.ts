@@ -1,9 +1,12 @@
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
+  AuthOrchestrationOperateScope,
   AuthPreviewOperateScope,
   AuthTerminalOperateScope,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import { useClosedViewStore } from "../closedViewStore";
 import { agentControlledBrowserCloseConfirmation } from "../components/ChatView.logic";
 import { closePreviewSession } from "../components/preview/closePreviewSession";
 import { useThreadTerminalActions } from "../components/terminal/useThreadTerminalActions";
@@ -17,19 +20,25 @@ import {
   useRightPanelStore,
   type RightPanelSurface,
 } from "../rightPanelStore";
+import { readThreadShell } from "../state/entities";
 import { previewEnvironment } from "../state/preview";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
+import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useStableCallback } from "./useStableCallback";
 
-/** Closing releases preview and terminal sessions. Agent-driven browsers and terminal tabs require confirmation. */
+/**
+ * Closing releases preview and terminal sessions, and deletes a side chat that never ran.
+ * Agent-driven browsers and terminal tabs require confirmation.
+ */
 export function useRightPanelSurfaceClose(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly terminalLabelsById: ReadonlyMap<string, string>;
 }) {
   const { threadRef, terminalLabelsById } = input;
   const closePreview = useAtomCommand(previewEnvironment.close, "preview close");
+  const deleteThread = useAtomCommand(threadEnvironment.delete, "side chat delete");
   const canOperatePreview = useEnvironmentScope(
     threadRef?.environmentId ?? null,
     AuthPreviewOperateScope,
@@ -58,6 +67,26 @@ export function useRightPanelSurfaceClose(input: {
       for (const terminalId of surface.terminalIds) {
         storeCloseTerminal(ref, terminalId);
         terminalActions.closeTerminalSession(terminalId);
+      }
+    }
+    if (
+      surface.kind === "side-chat" &&
+      readEnvironmentScope(ref.environmentId, AuthOrchestrationOperateScope) &&
+      readThreadShell(scopeThreadRef(ref.environmentId, surface.threadId))?.latestRun === null
+    ) {
+      void deleteThread({
+        environmentId: ref.environmentId,
+        input: { threadId: surface.threadId },
+      });
+      const closedViews = useClosedViewStore.getState();
+      for (const entry of closedViews.entries) {
+        if (
+          entry.kind === "panel-tab" &&
+          entry.surface.id === surface.id &&
+          scopedThreadKey(entry.threadRef) === scopedThreadKey(ref)
+        ) {
+          closedViews.remove(entry.id);
+        }
       }
     }
   };

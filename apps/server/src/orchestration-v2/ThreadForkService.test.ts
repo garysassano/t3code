@@ -245,22 +245,30 @@ it.effect("rejects in-progress and rolled-back fork sources", () =>
   }),
 );
 
-it.effect("marks only requested forks as side chats", () =>
+it.effect("marks only requested forks as supervised side chats", () =>
   Effect.gen(function* () {
     const sourceRun = makeSourceRun("completed");
     const sideChat = yield* planFork(sourceRun, makeSourceProjection(sourceRun), {
       sideChat: true,
     });
     assert.isTrue(sideChat.targetThread.lineage.sideChat);
+    assert.equal(sideChat.targetThread.runtimeMode, "approval-required");
 
     const sideChatSource = makeSourceProjection(sourceRun);
-    const forkOfSideChat = yield* planFork(sourceRun, {
+    const sideChatProjection = {
       ...sideChatSource,
       thread: {
         ...sideChatSource.thread,
         lineage: { ...sideChatSource.thread.lineage, sideChat: true },
       },
-    });
+    };
+    const forkOfSideChat = yield* planFork(sourceRun, sideChatProjection);
     assert.isUndefined(forkOfSideChat.targetThread.lineage.sideChat);
+    assert.equal(forkOfSideChat.targetThread.runtimeMode, "full-access");
+
+    const nested = yield* planFork(sourceRun, sideChatProjection, { sideChat: true }).pipe(
+      Effect.flip,
+    );
+    assert.equal(nested.cause, "A side chat cannot start another side chat.");
   }),
 );

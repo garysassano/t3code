@@ -551,15 +551,17 @@ describe("extendReplacementRangeForTrailingSpace", () => {
 });
 
 describe("parseSideChatCommand", () => {
-  it("reads an optional prompt after /side", () => {
+  it("reads an optional prompt after /side or /btw", () => {
     expect(parseSideChatCommand("/side")).toEqual({ prompt: "" });
     expect(parseSideChatCommand("  /SIDE  why does this fail?\nline two ")).toEqual({
       prompt: "why does this fail?\nline two",
     });
+    expect(parseSideChatCommand("/btw check @src/a.ts")).toEqual({ prompt: "check @src/a.ts" });
   });
 
   it("ignores other commands and inline mentions", () => {
     expect(parseSideChatCommand("/sidebar")).toBeNull();
+    expect(parseSideChatCommand("/btwx")).toBeNull();
     expect(parseSideChatCommand("ask /side later")).toBeNull();
   });
 });

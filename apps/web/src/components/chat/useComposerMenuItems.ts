@@ -247,6 +247,13 @@ export function useComposerMenuItems({
                 label: "/side",
                 description: "Ask a side question in a new side chat",
               },
+              {
+                id: "slash:btw",
+                type: "slash-command",
+                command: "btw",
+                label: "/btw",
+                description: "Same as /side",
+              },
             ] as const)
           : []),
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;

@@ -23,6 +23,7 @@ export function ThreadTimeline({
   activeThreadKey,
   syncing,
   detailLoading,
+  ownItemsOnly = false,
   ...timelineProps
 }: Omit<ComponentProps<typeof MessagesTimeline>, "timelineEntries"> & {
   /** Null until the thread's detail may load; see resolveThreadDetailRef. */
@@ -33,8 +34,13 @@ export function ThreadTimeline({
   activeThreadKey: string | null;
   syncing: boolean;
   detailLoading: boolean;
+  /** Leaves out rows inherited from the thread it forked from. */
+  ownItemsOnly?: boolean;
 }) {
-  const visibleTurnItems = useThreadVisibleTurnItems(threadDetailRef);
+  const threadVisibleTurnItems = useThreadVisibleTurnItems(threadDetailRef);
+  const visibleTurnItems = ownItemsOnly
+    ? threadVisibleTurnItems.filter((item) => item.sourceThreadId === threadDetailRef?.threadId)
+    : threadVisibleTurnItems;
   const serverEntries = useIncrementalTimelineEntries(activeThreadKey, {
     ...entriesInput,
     visibleTurnItems,

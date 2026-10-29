@@ -733,19 +733,28 @@ export function useComposerSend(input: ComposerSendInput) {
       }
       return;
     }
-    const standaloneSlashCommand =
-      sendInteractionModeEnabled &&
+    const textOnly =
       composerImages.length === 0 &&
       composerFiles.length === 0 &&
       sendableComposerTerminalContexts.length === 0 &&
       composerPreviewAnnotations.length === 0 &&
       composerReviewComments.length === 0 &&
       composerThreadContexts.length === 0 &&
-      composerEnvironmentContexts.length === 0
-        ? parseStandaloneComposerSlashCommand(trimmed)
-        : null;
+      composerEnvironmentContexts.length === 0;
+    const standaloneSlashCommand =
+      sendInteractionModeEnabled && textOnly ? parseStandaloneComposerSlashCommand(trimmed) : null;
     const sideChatCommand = onSideChat ? parseSideChatCommand(trimmed) : null;
     if (onSideChat && sideChatCommand) {
+      if (!textOnly) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Side chats take text only",
+            description: "Remove the attachments and context, then send it again.",
+          }),
+        );
+        return;
+      }
       onSideChat(sideChatCommand.prompt);
       promptRef.current = "";
       clearComposerDraftContent(composerDraftTarget);

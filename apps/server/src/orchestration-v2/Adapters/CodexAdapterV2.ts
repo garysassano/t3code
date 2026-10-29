@@ -1630,6 +1630,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
     planSelectionTransition: Effect.fn("CodexAdapterV2.planSelectionTransition")(function () {
       return Effect.succeed(turnScopedSelectionTransition());
     }),
+    // thread/fork lastTurnId needs the native turn id; rollback only removes finished turns.
+    canForkAtTurn: (turn) => turn.nativeTurnRef?.nativeId != null,
     openSession: Effect.fn("CodexAdapterV2.openSession")(
       function* (input) {
         const scope = yield* Scope.Scope;

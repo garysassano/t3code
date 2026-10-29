@@ -1,6 +1,15 @@
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { useProjects, useServerConfigs, useThreadShells } from "~/state/entities";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  threadRuntimeIsActive,
+  type EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
+import {
+  useProjects,
+  useQuietThreadShell,
+  useServerConfigs,
+  useThreadShells,
+} from "~/state/entities";
 import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
@@ -12,6 +21,7 @@ import type {
   ProjectId,
   PullRequestState,
   ResolvedKeybindingsConfig,
+  ThreadId,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
@@ -130,7 +140,8 @@ export interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
-  onAddSideChat: () => void;
+  /** Absent where side chats are not offered. */
+  onAddSideChat?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -138,7 +149,7 @@ export interface RightPanelTabsProps {
   pullRequestAvailable: boolean;
   pullRequestsAvailable: boolean;
   deviceAvailable: boolean;
-  sideChatAvailable: boolean;
+  sideChatAvailable?: boolean;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
   children: ReactNode;
 }
@@ -165,7 +176,7 @@ const SURFACE_DISABLED_REASONS = {
   pullRequest: "This thread's branch has no pull request yet.",
   pullRequests: "No linked pull requests are available for this thread.",
   device: "Devices are only available from a thread.",
-  sideChat: "Side chats need a finished response to branch from.",
+  sideChat: "Side chats start after the first message.",
 } as const;
 
 // Closed keepMounted popups must stop blocking shortcuts once their exit transition ends.
@@ -190,7 +201,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
   device: "Available from a thread.",
-  sideChat: "Available after a finished response.",
+  sideChat: "Available after the first message.",
 } as const;
 
 type TabContextMenuAction =
@@ -308,7 +319,8 @@ function RightPanelEmptyState(props: {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
-  onAddSideChat: () => void;
+  /** Absent where side chats are not offered. */
+  onAddSideChat?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -378,15 +390,19 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
       onClick: props.onAddDevice,
     },
-    {
-      label: "Side chat",
-      description: "Ask a side question without touching this thread.",
-      icon: MessagesSquare,
-      shortcut: "S",
-      available: props.sideChatAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.sideChat,
-      onClick: props.onAddSideChat,
-    },
+    ...(props.onAddSideChat
+      ? [
+          {
+            label: "Side chat",
+            description: "Ask a side question while this thread keeps working.",
+            icon: MessagesSquare,
+            shortcut: "S",
+            available: props.sideChatAvailable,
+            disabledReason: SURFACE_UNAVAILABLE_HINTS.sideChat,
+            onClick: props.onAddSideChat,
+          },
+        ]
+      : []),
   ] as const;
 
   type SurfaceAction = (typeof actions)[number];
@@ -663,7 +679,7 @@ function SurfaceIcon({
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "side-chat":
-      return <MessagesSquare className="size-3 shrink-0" />;
+      return <SideChatTabIcon environmentId={environmentId} threadId={surface.threadId} />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -673,6 +689,37 @@ function SurfaceIcon({
         <Smartphone className="size-3 shrink-0" />
       );
   }
+}
+
+function useSideChatShell(environmentId: EnvironmentId | null, threadId: ThreadId) {
+  return useQuietThreadShell(
+    environmentId === null ? null : scopeThreadRef(environmentId, threadId),
+  );
+}
+
+// Static dots: a side chat tab can stay open for a whole run.
+function SideChatTabIcon(props: { environmentId: EnvironmentId | null; threadId: ThreadId }) {
+  const shell = useSideChatShell(props.environmentId, props.threadId);
+  const needsYou = shell !== null && (shell.hasPendingApprovals || shell.hasPendingUserInput);
+  const running = shell !== null && threadRuntimeIsActive(shell.runtime);
+  return (
+    <>
+      <MessagesSquare className="size-3 shrink-0" />
+      {needsYou || running ? (
+        <span
+          className={cn(
+            "absolute -top-0.5 -right-0.5 size-1.5 rounded-full",
+            needsYou ? "bg-info" : "bg-muted-foreground",
+          )}
+          aria-hidden
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SideChatTabTitle(props: { environmentId: EnvironmentId | null; threadId: ThreadId }) {
+  return useSideChatShell(props.environmentId, props.threadId)?.title ?? "Side chat";
 }
 
 export function resolvePullRequestTabLink(
@@ -846,6 +893,12 @@ function RightPanelTab(
     id: surface.id,
     disabled: props.dragDisabled,
   });
+  const label =
+    surface.kind === "side-chat" ? (
+      <SideChatTabTitle environmentId={props.environmentId} threadId={surface.threadId} />
+    ) : (
+      title
+    );
   const content = (
     <>
       <PanelTabCloseButton label={`Close ${title}`} onClick={() => onClose(surface)}>
@@ -917,7 +970,7 @@ function RightPanelTab(
                 className="cursor-pointer flex min-w-0 items-center"
                 onClick={() => onActivate(surface)}
               >
-                <span className="truncate">{title}</span>
+                <span className="truncate">{label}</span>
               </button>
             }
           />
@@ -929,7 +982,7 @@ function RightPanelTab(
                 title={title}
               />
             ) : (
-              title
+              label
             )}
           </TooltipPopup>
         </Tooltip>
@@ -1085,14 +1138,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       disabledReason: SURFACE_DISABLED_REASONS.device,
       onClick: props.onAddDevice,
     },
-    {
-      label: "Side chat",
-      icon: MessagesSquare,
-      shortcut: "S",
-      available: props.sideChatAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.sideChat,
-      onClick: props.onAddSideChat,
-    },
+    ...(props.onAddSideChat
+      ? [
+          {
+            label: "Side chat",
+            icon: MessagesSquare,
+            shortcut: "S",
+            available: props.sideChatAvailable === true,
+            disabledReason: SURFACE_DISABLED_REASONS.sideChat,
+            onClick: props.onAddSideChat,
+          },
+        ]
+      : []),
   ] as const;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1475,7 +1532,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             pullRequestAvailable={props.pullRequestAvailable}
             pullRequestsAvailable={props.pullRequestsAvailable}
             deviceAvailable={props.deviceAvailable}
-            sideChatAvailable={props.sideChatAvailable}
+            sideChatAvailable={props.sideChatAvailable === true}
           />
         ) : (
           props.children
