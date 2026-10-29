@@ -23,7 +23,11 @@ export function ThreadDetailsSection({
       aria-labelledby={showHeading ? headingId : undefined}
       aria-label={showHeading ? undefined : title}
       // The first rendered section never needs a divider, even when the user hid the ones above it.
-      className={cn("px-2 pt-2 pb-2.5", separated && "border-t border-border/65 first:border-t-0")}
+      // A row can still render nothing (a fresh draft quiets Git actions), so an empty section collapses.
+      className={cn(
+        "px-2 pt-2 pb-2.5 has-[>div:last-child:empty]:hidden",
+        separated && "border-t border-border/65 first:border-t-0",
+      )}
     >
       <div
         className={cn(

@@ -1654,235 +1654,248 @@ export default function GitActionsControl({
         </ThreadDetailsControl>
       ) : null}
 
-      <Dialog
-        open={isCommitDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsCommitDialogOpen(false);
-            setDialogCommitMessage("");
-            setExcludedFiles(new Set());
-            setIsEditingFiles(false);
-          }
-        }}
-      >
-        <DialogPopup>
-          <DialogHeader>
-            <DialogTitle>{COMMIT_DIALOG_TITLE}</DialogTitle>
-            <DialogDescription>{COMMIT_DIALOG_DESCRIPTION}</DialogDescription>
-          </DialogHeader>
-          <DialogPanel>
-            <div className="space-y-3 rounded-xl bg-zinc-25 p-3 text-sm ring-1 ring-black/5 dark:bg-white/[0.035] dark:ring-white/5">
-              <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-                <span className="text-muted-foreground">Branch</span>
-                <span className="flex items-center justify-between gap-2">
-                  <span className="font-medium">
-                    {gitStatusForActions?.refName ?? "(detached HEAD)"}
-                  </span>
-                  {isDefaultRef && <span className="text-right text-warning">Default branch</span>}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {isEditingFiles && allFiles.length > 0 && (
-                      <Checkbox
-                        checked={allSelected}
-                        indeterminate={!allSelected && !noneSelected}
-                        onCheckedChange={() => {
-                          setExcludedFiles(
-                            allSelected ? new Set(allFiles.map((f) => f.path)) : new Set(),
-                          );
-                        }}
-                      />
-                    )}
-                    <span className="text-muted-foreground">Files</span>
-                    {!allSelected && !isEditingFiles && (
-                      <span className="text-muted-foreground">
-                        ({selectedFiles.length} of {allFiles.length})
-                      </span>
-                    )}
-                  </div>
-                  {allFiles.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => setIsEditingFiles((prev) => !prev)}
-                    >
-                      {isEditingFiles ? "Done" : "Edit"}
-                    </Button>
-                  )}
-                </div>
-                {!gitStatusForActions || allFiles.length === 0 ? (
-                  <p className="font-medium">none</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="h-44 rounded-lg bg-card ring-1 ring-black/5 dark:bg-white/[0.025] dark:ring-white/5">
-                      <ScrollArea>
-                        <div className="space-y-1 p-1">
-                          {allFiles.map((file) => {
-                            const isExcluded = excludedFiles.has(file.path);
-                            return (
-                              <div
-                                key={file.path}
-                                className="flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono hover:bg-accent/50"
-                              >
-                                {isEditingFiles && (
-                                  <Checkbox
-                                    checked={!excludedFiles.has(file.path)}
-                                    onCheckedChange={() => {
-                                      setExcludedFiles((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(file.path)) {
-                                          next.delete(file.path);
-                                        } else {
-                                          next.add(file.path);
-                                        }
-                                        return next;
-                                      });
-                                    }}
-                                  />
-                                )}
-                                <button
-                                  type="button"
-                                  className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left enabled:cursor-pointer"
-                                  disabled={!canOperateThread || workingTreeRoot === null}
-                                  aria-label={`Open ${file.path} in editor`}
-                                  onClick={() => openChangedFileInEditor(file.path)}
-                                >
-                                  <StartTruncatedPath
-                                    path={file.path}
-                                    className={`flex-1${isExcluded ? " text-muted-foreground" : ""}`}
-                                  />
-                                  <span className="shrink-0">
-                                    {isExcluded ? (
-                                      <span className="text-muted-foreground">Excluded</span>
-                                    ) : (
-                                      <>
-                                        <span className="text-diff-addition">
-                                          +{formatDiffCount(file.insertions)}
-                                        </span>
-                                        <span className="text-muted-foreground"> / </span>
-                                        <span className="text-diff-deletion">
-                                          -{formatDiffCount(file.deletions)}
-                                        </span>
-                                      </>
-                                    )}
-                                  </span>
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                    <div className="flex justify-end font-mono">
-                      <span className="text-diff-addition">
-                        +{formatDiffCount(selectedFiles.reduce((sum, f) => sum + f.insertions, 0))}
-                      </span>
-                      <span className="text-muted-foreground"> / </span>
-                      <span className="text-diff-deletion">
-                        -{formatDiffCount(selectedFiles.reduce((sum, f) => sum + f.deletions, 0))}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Commit message (optional)</p>
-              <Textarea
-                value={dialogCommitMessage}
-                onChange={(event) => setDialogCommitMessage(event.target.value)}
-                placeholder="Leave empty to auto-generate"
-                size="sm"
-              />
-            </div>
-          </DialogPanel>
-          <DialogFooter variant="bare">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
+      {/* The dialogs open only from Git actions, so hiding that row unmounts them and their queries. */}
+      {showActions ? (
+        <>
+          <Dialog
+            open={isCommitDialogOpen}
+            onOpenChange={(open) => {
+              if (!open) {
                 setIsCommitDialogOpen(false);
                 setDialogCommitMessage("");
                 setExcludedFiles(new Set());
                 setIsEditingFiles(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!canChangeThreadBranch || noneSelected}
-              onClick={runDialogActionOnNewBranch}
-            >
-              Commit on new branch
-            </Button>
-            <Button
-              size="sm"
-              disabled={!canWriteSourceControl || noneSelected}
-              onClick={runDialogAction}
-            >
-              Commit
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+              }
+            }}
+          >
+            <DialogPopup>
+              <DialogHeader>
+                <DialogTitle>{COMMIT_DIALOG_TITLE}</DialogTitle>
+                <DialogDescription>{COMMIT_DIALOG_DESCRIPTION}</DialogDescription>
+              </DialogHeader>
+              <DialogPanel>
+                <div className="space-y-3 rounded-xl bg-zinc-25 p-3 text-sm ring-1 ring-black/5 dark:bg-white/[0.035] dark:ring-white/5">
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                    <span className="text-muted-foreground">Branch</span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {gitStatusForActions?.refName ?? "(detached HEAD)"}
+                      </span>
+                      {isDefaultRef && (
+                        <span className="text-right text-warning">Default branch</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {isEditingFiles && allFiles.length > 0 && (
+                          <Checkbox
+                            checked={allSelected}
+                            indeterminate={!allSelected && !noneSelected}
+                            onCheckedChange={() => {
+                              setExcludedFiles(
+                                allSelected ? new Set(allFiles.map((f) => f.path)) : new Set(),
+                              );
+                            }}
+                          />
+                        )}
+                        <span className="text-muted-foreground">Files</span>
+                        {!allSelected && !isEditingFiles && (
+                          <span className="text-muted-foreground">
+                            ({selectedFiles.length} of {allFiles.length})
+                          </span>
+                        )}
+                      </div>
+                      {allFiles.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => setIsEditingFiles((prev) => !prev)}
+                        >
+                          {isEditingFiles ? "Done" : "Edit"}
+                        </Button>
+                      )}
+                    </div>
+                    {!gitStatusForActions || allFiles.length === 0 ? (
+                      <p className="font-medium">none</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="h-44 rounded-lg bg-card ring-1 ring-black/5 dark:bg-white/[0.025] dark:ring-white/5">
+                          <ScrollArea>
+                            <div className="space-y-1 p-1">
+                              {allFiles.map((file) => {
+                                const isExcluded = excludedFiles.has(file.path);
+                                return (
+                                  <div
+                                    key={file.path}
+                                    className="flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono hover:bg-accent/50"
+                                  >
+                                    {isEditingFiles && (
+                                      <Checkbox
+                                        checked={!excludedFiles.has(file.path)}
+                                        onCheckedChange={() => {
+                                          setExcludedFiles((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(file.path)) {
+                                              next.delete(file.path);
+                                            } else {
+                                              next.add(file.path);
+                                            }
+                                            return next;
+                                          });
+                                        }}
+                                      />
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left enabled:cursor-pointer"
+                                      disabled={!canOperateThread || workingTreeRoot === null}
+                                      aria-label={`Open ${file.path} in editor`}
+                                      onClick={() => openChangedFileInEditor(file.path)}
+                                    >
+                                      <StartTruncatedPath
+                                        path={file.path}
+                                        className={`flex-1${isExcluded ? " text-muted-foreground" : ""}`}
+                                      />
+                                      <span className="shrink-0">
+                                        {isExcluded ? (
+                                          <span className="text-muted-foreground">Excluded</span>
+                                        ) : (
+                                          <>
+                                            <span className="text-diff-addition">
+                                              +{formatDiffCount(file.insertions)}
+                                            </span>
+                                            <span className="text-muted-foreground"> / </span>
+                                            <span className="text-diff-deletion">
+                                              -{formatDiffCount(file.deletions)}
+                                            </span>
+                                          </>
+                                        )}
+                                      </span>
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </ScrollArea>
+                        </div>
+                        <div className="flex justify-end font-mono">
+                          <span className="text-diff-addition">
+                            +
+                            {formatDiffCount(
+                              selectedFiles.reduce((sum, f) => sum + f.insertions, 0),
+                            )}
+                          </span>
+                          <span className="text-muted-foreground"> / </span>
+                          <span className="text-diff-deletion">
+                            -
+                            {formatDiffCount(
+                              selectedFiles.reduce((sum, f) => sum + f.deletions, 0),
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Commit message (optional)</p>
+                  <Textarea
+                    value={dialogCommitMessage}
+                    onChange={(event) => setDialogCommitMessage(event.target.value)}
+                    placeholder="Leave empty to auto-generate"
+                    size="sm"
+                  />
+                </div>
+              </DialogPanel>
+              <DialogFooter variant="bare">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsCommitDialogOpen(false);
+                    setDialogCommitMessage("");
+                    setExcludedFiles(new Set());
+                    setIsEditingFiles(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!canChangeThreadBranch || noneSelected}
+                  onClick={runDialogActionOnNewBranch}
+                >
+                  Commit on new branch
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!canWriteSourceControl || noneSelected}
+                  onClick={runDialogAction}
+                >
+                  Commit
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
 
-      <PublishRepositoryDialog
-        open={isPublishDialogOpen}
-        onOpenChange={setIsPublishDialogOpen}
-        environmentId={activeEnvironmentId}
-        threadRef={activeThreadRef}
-        gitCwd={gitCwd}
-      />
+          <PublishRepositoryDialog
+            open={isPublishDialogOpen}
+            onOpenChange={setIsPublishDialogOpen}
+            environmentId={activeEnvironmentId}
+            threadRef={activeThreadRef}
+            gitCwd={gitCwd}
+          />
 
-      <Dialog
-        open={pendingDefaultBranchAction !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDefaultBranchAction(null);
-        }}
-      >
-        <DialogPopup className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {pendingDefaultBranchActionCopy?.title ?? "Run action on default branch?"}
-            </DialogTitle>
-            <DialogDescription>{pendingDefaultBranchActionCopy?.description}</DialogDescription>
-            {featureBranchUnavailableReason && (
-              <p className="text-xs text-muted-foreground">{featureBranchUnavailableReason}</p>
-            )}
-          </DialogHeader>
-          <DialogFooter variant="bare" className="sm:flex-wrap sm:items-center">
-            <Button
-              className="w-full sm:mr-auto sm:w-auto"
-              variant="outline"
-              size="sm"
-              onClick={() => setPendingDefaultBranchAction(null)}
-            >
-              Abort
-            </Button>
-            <Button
-              className="w-full max-w-full sm:w-auto"
-              variant="outline"
-              size="sm-multiline"
-              onClick={() => continuePendingDefaultBranchAction(false)}
-              disabled={!canWriteSourceControl}
-            >
-              {pendingDefaultBranchActionCopy?.continueLabel ?? "Continue"}
-            </Button>
-            <Button
-              className="w-full max-w-full sm:w-auto"
-              size="sm-multiline"
-              onClick={() => continuePendingDefaultBranchAction(true)}
-              disabled={!canChangeThreadBranch || featureBranchUnavailableReason !== null}
-            >
-              Check out feature branch & continue
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+          <Dialog
+            open={pendingDefaultBranchAction !== null}
+            onOpenChange={(open) => {
+              if (!open) setPendingDefaultBranchAction(null);
+            }}
+          >
+            <DialogPopup className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {pendingDefaultBranchActionCopy?.title ?? "Run action on default branch?"}
+                </DialogTitle>
+                <DialogDescription>{pendingDefaultBranchActionCopy?.description}</DialogDescription>
+                {featureBranchUnavailableReason && (
+                  <p className="text-xs text-muted-foreground">{featureBranchUnavailableReason}</p>
+                )}
+              </DialogHeader>
+              <DialogFooter variant="bare" className="sm:flex-wrap sm:items-center">
+                <Button
+                  className="w-full sm:mr-auto sm:w-auto"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPendingDefaultBranchAction(null)}
+                >
+                  Abort
+                </Button>
+                <Button
+                  className="w-full max-w-full sm:w-auto"
+                  variant="outline"
+                  size="sm-multiline"
+                  onClick={() => continuePendingDefaultBranchAction(false)}
+                  disabled={!canWriteSourceControl}
+                >
+                  {pendingDefaultBranchActionCopy?.continueLabel ?? "Continue"}
+                </Button>
+                <Button
+                  className="w-full max-w-full sm:w-auto"
+                  size="sm-multiline"
+                  onClick={() => continuePendingDefaultBranchAction(true)}
+                  disabled={!canChangeThreadBranch || featureBranchUnavailableReason !== null}
+                >
+                  Check out feature branch & continue
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+        </>
+      ) : null}
     </>
   );
 }

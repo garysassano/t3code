@@ -8,6 +8,7 @@ import {
   isDefaultThreadDetailsVisibility,
   resolveThreadDetailsVisibility,
   RESET_THREAD_DETAILS_ITEMS,
+  setThreadDetailsItem,
   THREAD_DETAILS_ITEMS,
 } from "./threadDetailsItems";
 
@@ -24,10 +25,7 @@ export function ThreadDetailsItemsMenuItems() {
             checked={visibility[item.id]}
             onCheckedChange={(checked) =>
               updateClientSettings({
-                threadDetailsItems: {
-                  ...getClientSettings().threadDetailsItems,
-                  [item.id]: checked,
-                },
+                threadDetailsItems: setThreadDetailsItem(getClientSettings(), item, checked),
               })
             }
           >

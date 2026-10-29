@@ -278,8 +278,9 @@ and keeps the agent, the terminal, and T3 Code running. Stop needs terminal
 access to the environment and is not available on Windows.
 
 To choose what the thread details card shows, right-click the card or open
-**Settings → Appearance → Thread details**. A hidden row stays available from its
-usual commands. **Reset to default** brings back the standard rows.
+**Settings → Appearance → Thread details**. Hidden rows keep their keyboard
+shortcuts, such as Open in editor and project scripts. **Reset to default** brings
+back the standard rows.
 
 ## Snooze until later
 

@@ -115,8 +115,6 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
       ? { onCheckoutPullRequestRequest: props.onCheckoutPullRequestRequest }
       : {}),
   };
-  const showWorkspace = visible.environment || visible.openIn || visible.scripts;
-  const showVersionControl = visible.branch || visible.gitActions || visible.changes;
 
   return (
     <ThreadDetailsCard
@@ -127,150 +125,171 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         .map((item) => item.id)
         .join(",")}
       onContextMenu={(event) => {
+        // Popups the card opens bubble here through React; they, fields, and links keep their own menus.
+        const target = event.target;
+        if (
+          !(target instanceof Element) ||
+          !event.currentTarget.contains(target) ||
+          target.closest("input, textarea, [contenteditable], a[href]")
+        )
+          return;
         event.preventDefault();
         setMenuPosition({ x: event.clientX, y: event.clientY });
       }}
     >
-      {(density) => (
-        <>
-          <div>
-            {showWorkspace ? (
-              <ThreadDetailsSection
-                headingId="thread-details-workspace-heading"
-                title="Workspace"
-                separated={false}
-                showHeading={false}
-              >
-                <div className="flex flex-col">
-                  {density === "full" && visible.environment ? (
-                    <BranchToolbar
-                      layout="panel"
-                      panelSection="workspace"
-                      availableEnvironments={props.availableEnvironments}
-                      {...(props.onEnvironmentChange
-                        ? { onEnvironmentChange: props.onEnvironmentChange }
-                        : {})}
-                      autoEnvironmentLabel={props.autoEnvironmentLabel}
-                      onAutoEnvironment={props.onAutoEnvironment}
-                      {...branchToolbarProps}
-                    />
-                  ) : null}
+      {(density) => {
+        // Section flags follow the rows that will render, so no empty section steals the divider rule.
+        const show = {
+          environment: density === "full" && visible.environment,
+          openIn: density !== "essential" && visible.openIn && props.showOpenInPicker,
+          scripts: visible.scripts && props.activeProjectScripts !== undefined,
+          branch: props.gitCwd !== null && props.isGitRepo && visible.branch,
+          git:
+            props.gitCwd !== null &&
+            props.activeProjectName !== undefined &&
+            (visible.gitActions || (visible.changes && props.isGitRepo)),
+        };
+        return (
+          <>
+            <div>
+              {show.environment || show.openIn || show.scripts ? (
+                <ThreadDetailsSection
+                  headingId="thread-details-workspace-heading"
+                  title="Workspace"
+                  separated={false}
+                  showHeading={false}
+                >
+                  <div className="flex flex-col">
+                    {show.environment ? (
+                      <BranchToolbar
+                        layout="panel"
+                        panelSection="workspace"
+                        availableEnvironments={props.availableEnvironments}
+                        {...(props.onEnvironmentChange
+                          ? { onEnvironmentChange: props.onEnvironmentChange }
+                          : {})}
+                        autoEnvironmentLabel={props.autoEnvironmentLabel}
+                        onAutoEnvironment={props.onAutoEnvironment}
+                        {...branchToolbarProps}
+                      />
+                    ) : null}
 
-                  {density !== "essential" && visible.openIn && props.showOpenInPicker ? (
-                    <OpenInPicker
-                      keybindings={props.keybindings}
-                      environmentId={props.environmentId}
-                      availableEditors={props.availableEditors}
-                      openInCwd={props.gitCwd}
-                      enableShortcut={props.openInShortcutEnabled}
-                      displayMode="panel"
-                    />
-                  ) : null}
+                    {show.openIn ? (
+                      <OpenInPicker
+                        keybindings={props.keybindings}
+                        environmentId={props.environmentId}
+                        availableEditors={props.availableEditors}
+                        openInCwd={props.gitCwd}
+                        enableShortcut={props.openInShortcutEnabled}
+                        displayMode="panel"
+                      />
+                    ) : null}
 
-                  {visible.scripts && props.activeProjectScripts ? (
-                    <ProjectScriptsControl
-                      environmentId={props.environmentId}
-                      displayMode="panel"
-                      scripts={props.activeProjectScripts}
-                      fileScripts={fileScripts}
-                      preferredScriptId={props.preferredScriptId}
-                      onRunScript={props.onRunProjectScript}
-                      onAddScript={props.onAddProjectScript}
-                      onUpdateScript={props.onUpdateProjectScript}
-                      onDeleteScript={props.onDeleteProjectScript}
-                    />
-                  ) : null}
-                </div>
-              </ThreadDetailsSection>
-            ) : null}
+                    {show.scripts && props.activeProjectScripts ? (
+                      <ProjectScriptsControl
+                        environmentId={props.environmentId}
+                        displayMode="panel"
+                        scripts={props.activeProjectScripts}
+                        fileScripts={fileScripts}
+                        preferredScriptId={props.preferredScriptId}
+                        onRunScript={props.onRunProjectScript}
+                        onAddScript={props.onAddProjectScript}
+                        onUpdateScript={props.onUpdateProjectScript}
+                        onDeleteScript={props.onDeleteProjectScript}
+                      />
+                    ) : null}
+                  </div>
+                </ThreadDetailsSection>
+              ) : null}
 
-            {props.gitCwd && showVersionControl ? (
-              <ThreadDetailsSection
-                headingId="thread-details-version-control-heading"
-                title="Version Control"
-                showHeading={false}
-                separated={density === "full"}
-              >
-                <div className="flex flex-col">
-                  {props.isGitRepo && visible.branch ? (
-                    <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
-                  ) : null}
-                  {props.activeProjectName && (visible.gitActions || visible.changes) ? (
-                    <GitActionsControl
-                      compact={density !== "full"}
-                      showActions={visible.gitActions}
-                      showChanges={visible.changes}
-                      gitCwd={props.gitCwd}
-                      activeThreadRef={activeThreadRef}
-                      {...(props.draftId ? { draftId: props.draftId } : {})}
-                      {...(props.onOpenChanges ? { onOpenChanges: props.onOpenChanges } : {})}
-                    />
-                  ) : null}
-                </div>
-              </ThreadDetailsSection>
-            ) : null}
+              {props.gitCwd && (show.branch || show.git) ? (
+                <ThreadDetailsSection
+                  headingId="thread-details-version-control-heading"
+                  title="Version Control"
+                  showHeading={false}
+                  separated={density === "full"}
+                >
+                  <div className="flex flex-col">
+                    {show.branch ? (
+                      <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
+                    ) : null}
+                    {show.git ? (
+                      <GitActionsControl
+                        compact={density !== "full"}
+                        showActions={visible.gitActions}
+                        showChanges={visible.changes}
+                        gitCwd={props.gitCwd}
+                        activeThreadRef={activeThreadRef}
+                        {...(props.draftId ? { draftId: props.draftId } : {})}
+                        {...(props.onOpenChanges ? { onOpenChanges: props.onOpenChanges } : {})}
+                      />
+                    ) : null}
+                  </div>
+                </ThreadDetailsSection>
+              ) : null}
 
-            {density === "full" && !props.draftId && visible.servers ? (
-              <ThreadServersPanel environmentId={props.environmentId} threadId={props.threadId} />
-            ) : null}
+              {density === "full" && !props.draftId && visible.servers ? (
+                <ThreadServersPanel environmentId={props.environmentId} threadId={props.threadId} />
+              ) : null}
 
-            {density === "full" && !props.draftId && visible.automations ? (
-              <ThreadAutomationsPanel
-                environmentId={props.environmentId}
-                threadId={props.threadId}
-              />
-            ) : null}
+              {density === "full" && !props.draftId && visible.automations ? (
+                <ThreadAutomationsPanel
+                  environmentId={props.environmentId}
+                  threadId={props.threadId}
+                />
+              ) : null}
 
-            {density === "full" && !props.draftId && visible.lineage ? (
-              <ThreadRelationshipsPanel
-                environmentId={props.environmentId}
-                threadId={props.threadId}
-              />
-            ) : null}
+              {density === "full" && !props.draftId && visible.lineage ? (
+                <ThreadRelationshipsPanel
+                  environmentId={props.environmentId}
+                  threadId={props.threadId}
+                />
+              ) : null}
 
-            {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
+              {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
 
-            {/* Shown only when nothing above rendered, so a card emptied by the user can be refilled. */}
-            <div className="hidden p-2 only:block">
-              <ThreadDetailsControl
-                size="xs"
-                variant="ghost"
-                part="row"
-                panel
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setMenuPosition({ x: rect.left, y: rect.bottom });
-                }}
-              >
-                <SlidersHorizontalIcon className={THREAD_DETAILS_PANEL_ICON_CLASS} aria-hidden />
-                <span className={cn("ml-0.5", THREAD_DETAILS_PANEL_LABEL_CLASS)}>
-                  Choose what to show
-                </span>
-              </ThreadDetailsControl>
+              {/* Shown only when nothing above rendered, so a card emptied by the user can be refilled. */}
+              <div className="hidden p-2 only:block">
+                <ThreadDetailsControl
+                  size="xs"
+                  variant="ghost"
+                  part="row"
+                  panel
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setMenuPosition({ x: rect.left, y: rect.bottom });
+                  }}
+                >
+                  <SlidersHorizontalIcon className={THREAD_DETAILS_PANEL_ICON_CLASS} aria-hidden />
+                  <span className={cn("ml-0.5", THREAD_DETAILS_PANEL_LABEL_CLASS)}>
+                    Choose what to show
+                  </span>
+                </ThreadDetailsControl>
+              </div>
             </div>
-          </div>
 
-          <Menu
-            open={menuPosition !== null}
-            onOpenChange={(open) => !open && setMenuPosition(null)}
-          >
-            <MenuPopup
-              anchor={
-                menuPosition
-                  ? {
-                      getBoundingClientRect: () =>
-                        new DOMRect(menuPosition.x, menuPosition.y, 0, 0),
-                    }
-                  : undefined
-              }
-              align="start"
-              side="bottom"
+            <Menu
+              open={menuPosition !== null}
+              onOpenChange={(open) => !open && setMenuPosition(null)}
             >
-              <ThreadDetailsItemsMenuItems />
-            </MenuPopup>
-          </Menu>
-        </>
-      )}
+              <MenuPopup
+                anchor={
+                  menuPosition
+                    ? {
+                        getBoundingClientRect: () =>
+                          new DOMRect(menuPosition.x, menuPosition.y, 0, 0),
+                      }
+                    : undefined
+                }
+                align="start"
+                side="bottom"
+              >
+                <ThreadDetailsItemsMenuItems />
+              </MenuPopup>
+            </Menu>
+          </>
+        );
+      }}
     </ThreadDetailsCard>
   );
 }

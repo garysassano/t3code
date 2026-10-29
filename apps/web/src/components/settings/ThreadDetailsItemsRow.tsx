@@ -15,7 +15,7 @@ import { searchableSetting } from "./settingsSearch";
 
 export function ThreadDetailsItemsRow() {
   const visibility = useClientSettings(resolveThreadDetailsVisibility);
-  const shown = THREAD_DETAILS_ITEMS.filter((item) => visibility[item.id]).length;
+  const enabled = THREAD_DETAILS_ITEMS.filter((item) => visibility[item.id]).length;
   return (
     <SettingsRow
       {...searchableSetting("thread-details-items")}
@@ -30,8 +30,17 @@ export function ThreadDetailsItemsRow() {
       }
       control={
         <Menu>
-          <MenuTrigger render={<Button variant="outline" size="sm" aria-label="Thread details" />}>
-            {shown} of {THREAD_DETAILS_ITEMS.length} shown
+          <MenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-between sm:w-40"
+                aria-label="Thread details"
+              />
+            }
+          >
+            {enabled} of {THREAD_DETAILS_ITEMS.length} on
             <ChevronDownIcon aria-hidden />
           </MenuTrigger>
           <MenuPopup align="end">
