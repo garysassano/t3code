@@ -914,7 +914,9 @@ jobs:
             --previous-tag "${{ needs.preflight.outputs.previous_tag }}" \
             --version "${{ needs.preflight.outputs.version }}" \
             --output release-notes.md
-          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f release-notes.md ]]; then
+            cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # A preview release gets a warning instead of generated notes. Generated
       # notes would list every commit since the previous preview, which is
