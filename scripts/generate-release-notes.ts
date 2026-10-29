@@ -383,7 +383,12 @@ const command = Command.make(
         return yield* Effect.logWarning("no release summary, leaving GitHub's notes in place");
       }
       const fs = yield* FileSystem.FileSystem;
-      yield* fs.writeFileString(output, assembleReleaseNotes(header, summary.value, fullChangelog));
+      // Publish uses the file when it exists, so a partial write must never land at `output`.
+      yield* fs.writeFileString(
+        `${output}.tmp`,
+        assembleReleaseNotes(header, summary.value, fullChangelog),
+      );
+      yield* fs.rename(`${output}.tmp`, output);
       yield* Effect.logInfo("release notes written").pipe(
         Effect.annotateLogs({ output, commits: commits.length }),
       );
